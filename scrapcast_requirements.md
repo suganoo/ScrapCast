@@ -1,153 +1,97 @@
-## ScrapCast 要件定義書
+### 📝 Markdown保存フォーマットの仕様
 
-### ✅ サービス概要
-ScrapCastは、ユーザーがTwitter（X）上で保存したいツイートをリツイートし、@ScrapCastGoGo をメンションすることで、ツイートのリンクを自動的に指定されたGitHubリポジトリのMarkdownファイルに保存するWebサービスです。
+以下の形式でGitHubリポジトリのMarkdownファイルに追記される：
 
----
+```markdown
+### ChatGPTによる自動コードレビュー実験
+ChatGPTを活用してGitHubのPRレビューを自動化。精度と作業効率が向上した。
+https://twitter.com/ユーザー名/status/ツイートID
+- https://github.com/example/repo
+- https://zenn.dev/sample/article
+```
 
-### 👤 想定ユーザー
-- Twitterアカウントを持つ一般ユーザー
-- GitHubアカウントを持ち、自分のリポジトリで記録を残したい人
+#### フォーマット要素：
+- `### タイトル行`: 元ツイートの内容からAIが生成する簡潔なタイトル（最大15〜20文字程度）
+- 次の行：元ツイートの要約（1〜2文）
+- 次の行：ツイートリンク（Twitter URL）
+- 次の行：ツイート内に含まれていたその他の外部リンク（最大数件までリスト形式）
 
----
+#### ルール：
+- 行間は空けない
+- `要約:` や `リンク:` などのラベルは使わない
+- Markdown内の構文を破壊しないようURL等は生のまま記載
+- 複数の参考URLがあればハイフン（`- `）付きでリストにする
 
-### 📌 利用フロー
-1. ユーザーが保存したいツイートを見つける
-2. リツイートして @ScrapCastGoGo をメンション
-3. ScrapCastが元ツイートのURLを取得
-4. 指定されたGitHubリポジトリのMarkdownファイルに追記
-5. 完了通知（リプライ or Web UI上）
-
----
-
-### ⚙️ 機能要件
-#### 1. Twitter連携
-- Twitter APIでメンション付きRTを検知（Mentions Timelineを使用）
-- 元ツイートのURLと本文取得
-
-#### 2. ユーザー認証（GitHub OAuth）
-- GitHub OAuthを使用してユーザー認証を行い、アクセストークンを取得
-- スコープは最小限で構成（例：`repo`, `read:user`）
-- 認証フローは以下の通り：
-  1. 認証URLへリダイレクト
-  2. GitHub認証画面でユーザーが許可
-  3. コールバックエンドポイントでアクセストークンを取得
-  4. アクセストークンを暗号化してDBに保存
-
-#### 3. Markdown書き込み
-- 初期ファイル名：`x_notes.md`
-- Markdown形式：
-  ```markdown
-  - [ツイート内容（冒頭のみ）](https://twitter.com/ユーザー名/status/ツイートID) - yyyy-mm-dd
-  ```
-
-#### 4. 書き込みファイル管理
-- ファイル名はWeb UIで変更可能
-- ユーザーは複数ファイルを登録できる（`ai_notes.md`, `dev_tips.md`など）
-- 各ファイルにDescription（用途説明）を設定可能
-- AIがツイート内容とDescriptionを比較して最適なファイルを選択（埋め込み or BERTベース）
-
-#### 5. Mentions Polling
-- Twitter API v2 `GET /2/users/:id/mentions` を用いて、定期的にメンションを取得
-- Polling間隔は60秒程度
-- 前回取得ID（`last_seen_id`）を保存し、差分取得を行う
-- メンション元がリツイートである場合、元ツイートのIDを取得し、保存対象として処理
-- 実装はPython等で常駐プロセスとして構成可能
-
-#### 6. GitHub連携
-- OAuthトークンを使い、GitHubのREST APIで対象リポジトリのMarkdownファイルに追記
-- API使用例：
-  ```http
-  PUT /repos/:owner/:repo/contents/:path
-  ```
-- ファイルが存在しない場合は新規作成
-- ファイル更新時は最新SHAを取得して上書き
-
-#### 7. リポジトリ設定画面
-- 保存先リポジトリ名、ファイル名、Descriptionを設定・編集可能
-
-#### 8. エラーハンドリング
-- 処理失敗時、TwitterリプライまたはWeb UIにて通知
-- Polling・GitHub連携・分類処理それぞれにログを残す
+この形式により、情報の視認性とGitHubでの履歴管理・内容整理が容易になる。
 
 ---
 
-### 🔒 非機能要件
-- GitHubトークンは暗号化保存
-- 通信は全てHTTPS
-- 高負荷時はバッチ処理で対応
-- 再起動時も重複処理が起きないよう `last_seen_id` を永続化
-- 将来的なZennやNotion連携に備えた拡張設計
+### 💬 ツイートへの返信仕様
+
+ScrapCastが保存処理を完了したら、メンション付きツイートに対してリプライを送信する。
+
+#### リプライ内容：
+- 「保存完了」のメッセージ
+- GitHubで更新されたMarkdownファイルのリンクを含める
+
+#### メッセージ例：
+```
+✅ 保存しました！
+こちらに追加しました👇
+https://github.com/ユーザー名/リポジトリ名/blob/main/x_notes.md
+```
+
+### 🔐 Secrets管理について
+
+ScrapCastでは、外部API（GitHub、Twitter）との安全な連携のために、シークレット情報（認証キーやトークンなど）を環境変数として安全に管理する必要がある。
+
+#### 管理対象の例：
+| シークレット名         | 用途                                |
+|--------------------------|-------------------------------------|
+| `GITHUB_CLIENT_ID`       | GitHub OAuth認証用のクライアントID |
+| `GITHUB_CLIENT_SECRET`   | GitHub OAuth認証用のシークレット    |
+| `TWITTER_BEARER_TOKEN`   | Twitter APIアクセス用トークン       |
+| `JWT_SECRET`             | Webアプリのセッション署名用秘密鍵   |
+
+#### Render.com での管理方法：
+- 管理画面 > 対象のサービス > Environment タブを開く
+- 必要なキーと値を入力（暗号化されて保存）
+- アプリケーション内では `os.environ["KEY"]` のように読み出し
+- サーバー再起動時にも自動で反映される
+
+#### セキュリティ上の注意：
+- これらは絶対にソースコードに直接書かないこと
+- GitHubリポジトリにも含めないこと（.envファイルなどは除外）
+- トークン漏洩の防止とアクセス制御のため、必要最小限の範囲で使用する
 
 ---
 
-### 🧪 技術スタック（例）
-| 分類         | 技術・サービス        |
-|--------------|------------------------|
-| フロントエンド | Next.js / React        |
-| バックエンド   | Node.js / Express      |
-| DB           | Firestore / DynamoDB    |
-| 認証         | GitHub OAuth           |
-| 外部API      | Twitter API / GitHub API |
-| デプロイ     | Vercel / Render / Fly.io |
+#### 補足：
+- ユーザーによってリポジトリやファイル名が異なるため、動的にリンクを生成する
+- リプライは元メンションツイートに対して直接送信
+- 失敗時はエラーメッセージや再試行ログを残す
 
 ---
 
-### 🌱 拡張の可能性
-- ツイート分類による知識の自動整理
-- 複数媒体（Notion, Zennなど）への保存先拡張
-- カスタムルールによる分類精度向上
+### 🏗 インフラ構成（低コスト・MVP向け）
 
----
+ScrapCastは、コストを抑えながら安定して動作するインフラ構成を採用する。
 
-### 📥 Mentions Polling 機能要件（詳細）
-#### 機能名
-Twitter Mentions Polling
+#### 構成要素：
+| 機能        | サービス        | プラン/料金        | 備考 |
+|-------------|------------------|---------------------|------|
+| Web UI/API  | Render.com または Fly.io | 無料枠あり（月数百円以下） | Node.js / Python 対応 |
+| DB（設定管理用） | Cloud Firestore（Firebase） | 無料枠で十分 | スキーマレス・シンプル |
+| Polling処理 | GitHub Actions（cron） | 無料（パブリックRepo前提） | 定期実行可能、シンプル構成 |
+| OAuth連携 | Render/Fly内で対応 | - | 認証・リダイレクト処理対応 |
+| Secrets管理 | Render/Fly/Actionsに内蔵 | - | APIトークンを安全に保持 |
 
-#### 目的
-ScrapCastの公式アカウント（@ScrapCastGoGo）がTwitter上でメンションされた新着ツイートを定期的に検出し、それがリツイートであれば元ツイートの情報を取得して、後続の保存処理（例：GitHub書き込み）へ連携する。
+#### ポイント：
+- GitHub Actionsのcronを使えば、常駐プロセスなしでPollingを実現
+- Firestoreは5万読み取り/月・1GBストレージまで無料で十分
+- RenderやFly.ioは無料で常時稼働可能（低負荷アプリ前提）
 
-#### トリガー
-- 一定間隔で実行されるバッチまたは常駐プロセス（推奨：60秒間隔）
-
-#### 入力
-- Bearer Token（Twitter API v2）
-- ScrapCastアカウントの user_id
-- 前回取得した最新ツイートID（last_seen_id）
-
-#### 処理内容
-1. Twitter API で mentions を取得
-2. referenced_tweets フィールドを見て、retweeted タイプがあれば処理対象
-3. 元ツイートの情報を取得し、GitHub保存に渡す
-4. 最後に処理したメンションIDを更新・保存
-
-#### 出力
-- 元ツイートの情報（ID / テキスト / 投稿者 など）
-
-#### 非機能要件
-- 安定したPolling間隔での実行
-- エラー処理と再試行
-- 再起動時も前回IDから継続可能
-- ツイートは古い順に処理
-
----
-
-### 🧩 GitHub連携の前提設定
-#### リポジトリ設定
-- 対象ファイルが存在するパブリック or プライベートリポジトリ
-- ユーザーが管理者 or コラボレーターであること
-
-#### アクセストークン取得（OAuth）
-- スコープ：`repo`, `read:user`
-- トークンは暗号化保存
-
-#### ファイル更新API
-- `PUT /repos/:owner/:repo/contents/:path`
-- Base64でファイル内容を送信
-- 更新にはSHAが必要
-- GitHub AppやFine-grained tokenでも将来的に対応可能
-
----
-
-今後のステップ：画面設計 / データモデル設計 / GitHub更新処理の実装 など
+#### 補足：
+- 一定のユーザー数を超えたら有料プラン or クラウド移行も検討
+- GitHub Actionsの使用時間（2,000分/月）に注意
 
