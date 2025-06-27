@@ -6,7 +6,7 @@ if "BEARER_TOKEN" not in os.environ:
     from dotenv import load_dotenv
     load_dotenv()
 
-BEARER_TOKEN = os.getenv("BEARER_TOKEN")
+BEARER_TOKEN = os.environ.get("BEARER_TOKEN")
 
 if not BEARER_TOKEN:
     raise EnvironmentError("BEARER_TOKEN が環境変数に設定されていません")
