@@ -29,6 +29,8 @@ jobs:
       - shell: bash
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
+          VAR_TEST: ${{ vars.VAR_TEST }}
         run: |
           #example-command "$BEARER_TOKEN"
-          echo "$BEARER_TOKEN"
+          echo "${env.BEARER_TOKEN}"
+          echo "${env.VAR_TEST}"
