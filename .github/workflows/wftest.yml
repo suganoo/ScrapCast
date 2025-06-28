@@ -30,4 +30,5 @@ jobs:
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
         run: |
-          example-command "$BEARER_TOKEN"
+          #example-command "$BEARER_TOKEN"
+          echo "$BEARER_TOKEN"
