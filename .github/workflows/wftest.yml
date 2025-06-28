@@ -32,5 +32,5 @@ jobs:
           VAR_TEST: ${{ vars.VAR_TEST }}
         run: |
           #example-command "$BEARER_TOKEN"
-          echo "${env.BEARER_TOKEN}"
-          echo "${env.VAR_TEST}"
+          echo "${BEARER_TOKEN}"
+          echo "${VAR_TEST}"
