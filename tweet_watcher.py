@@ -155,13 +155,13 @@ def process_tweet(tweet, referenced_tweets=None):
     print(f"引用ツイートURL: {tweet_url}")
     
     # 引用元ツイートの情報を表示
-        for ref in tweet["referenced_tweets"]:
-            if ref["type"] == "quoted" and ref["id"] in referenced_tweets:
-                quoted_tweet = referenced_tweets[ref["id"]]
-                quoted_url = f"https://twitter.com/i/web/status/{ref['id']}"
-                print("---------- 引用元ツイート ----------")
-                print(f"引用元本文: {quoted_tweet['text']}")
-                print(f"引用元URL: {quoted_url}")
+    for ref in tweet["referenced_tweets"]:
+        if ref["type"] == "quoted" and ref["id"] in referenced_tweets:
+            quoted_tweet = referenced_tweets[ref["id"]]
+            quoted_url = f"https://twitter.com/i/web/status/{ref['id']}"
+            print("---------- 引用元ツイート ----------")
+            print(f"引用元本文: {quoted_tweet['text']}")
+            print(f"引用元URL: {quoted_url}")
     
     print("=====================================")
     # TODO: Zenn投稿、要約、Notion保存などの処理をここで呼び出す
