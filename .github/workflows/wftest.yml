@@ -30,7 +30,13 @@ jobs:
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
           VAR_TEST: ${{ vars.VAR_TEST }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           #example-command "$BEARER_TOKEN"
           echo "${BEARER_TOKEN}"
           echo "${VAR_TEST}"
+          echo "${GITHUB_TOKEN}"
+          echo "${GITHUB_REPOSITORY}"
+          echo "${GH_PAT}"
