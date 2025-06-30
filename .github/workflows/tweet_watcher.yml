@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: write
+      repository-variables: write
 
     steps:
       - name: Checkout repository
@@ -31,6 +31,6 @@ jobs:
       - name: Run tweet watcher script
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python tweet_watcher.py
