@@ -37,7 +37,7 @@ def _get_variable_url():
     if not GITHUB_REPOSITORY:
         # This error should only be raised in a CI environment
         raise EnvironmentError("GITHUB_REPOSITORY が環境変数に設定されていません")
-    return f"https://api.github.com/repos/{GITHUB_REPOSITORY}/variables/{LAST_TWEET_ID_VAR_NAME}"
+    return f"https://api.github.com/repos/{GITHUB_REPOSITORY}/actions/variables/{LAST_TWEET_ID_VAR_NAME}"
 
 def _get_github_variable():
     """Fetches the last tweet ID from GitHub repository variables."""
@@ -73,7 +73,7 @@ def _set_github_variable(tweet_id):
 
         # If it doesn't exist (404), create it
         if response.status_code == 404:
-            create_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/variables"
+            create_url = f"https://api.github.com/repos/{GITHUB_REPOSITORY}/actions/variables"
             create_data = {"name": LAST_TWEET_ID_VAR_NAME, "value": str(tweet_id)}
             create_response = requests.post(create_url, headers=headers, json=create_data)
             create_response.raise_for_status()
