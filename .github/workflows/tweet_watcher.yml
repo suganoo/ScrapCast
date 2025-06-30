@@ -1,8 +1,12 @@
 name: Run Tweet Watcher
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"  # 5分ごとに実行
+  #schedule:
+  #  - cron: "*/5 * * * *"  # 5分ごとに実行
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:

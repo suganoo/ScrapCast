@@ -2,9 +2,9 @@ import os
 import requests
 
 # GitHub Actions で環境変数がセットされていない場合のみ .env を読み込む
-#if "BEARER_TOKEN" not in os.environ:
-#    from dotenv import load_dotenv
-#    load_dotenv()
+if "BEARER_TOKEN" not in os.environ:
+    from dotenv import load_dotenv
+    load_dotenv()
 
 BEARER_TOKEN = os.environ.get("BEARER_TOKEN")
 
