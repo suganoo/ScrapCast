@@ -31,6 +31,6 @@ jobs:
       - name: Run tweet watcher script
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python tweet_watcher.py
