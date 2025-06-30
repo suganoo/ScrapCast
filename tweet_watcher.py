@@ -14,19 +14,33 @@ if not BEARER_TOKEN:
 SEARCH_QUERY = "@ScrapCastGoGo is:quote"
 SEARCH_URL = "https://api.twitter.com/2/tweets/search/recent"
 
+def load_last_tweet_id():
+    try:
+        with open('last_tweet_id.txt', 'r') as f:
+            content = f.read().strip()
+            return content if content else None
+    except FileNotFoundError:
+        return None
+
+def save_last_tweet_id(tweet_id):
+    with open('last_tweet_id.txt', 'w') as f:
+        f.write(tweet_id)
+
 def bearer_oauth(r):
     r.headers["Authorization"] = f"Bearer {BEARER_TOKEN}"
     r.headers["User-Agent"] = "TweetWatcher"
     return r
 
 def search_recent_tweets():
+    last_tweet_id = load_last_tweet_id()
     params = {
         "query": SEARCH_QUERY,
         "max_results": 10,
         "tweet.fields": "created_at,text,author_id,referenced_tweets",
-        "expansions": "referenced_tweets.id",
-        "tweet.fields": "created_at,text,author_id,referenced_tweets"
+        "expansions": "referenced_tweets.id"
     }
+    if last_tweet_id:
+        params["since_id"] = last_tweet_id
     response = requests.get(SEARCH_URL, auth=bearer_oauth, params=params)
     if response.status_code != 200:
         raise Exception(f"Twitter APIエラー: {response.status_code}, {response.text}")
@@ -38,6 +52,11 @@ def search_recent_tweets():
     
     if not tweets:
         print("新着ツイートはありません。")
+        return
+    
+    # 最新のツイートIDを保存（最初のツイートが最新）
+    save_last_tweet_id(tweets[0]["id"])
+    
     for tweet in tweets:
         process_tweet(tweet, referenced_tweets)
 
