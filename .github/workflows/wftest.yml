@@ -25,6 +25,18 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
+      - name: Setup Firebase credentials
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" | base64 -d > $HOME/firebase-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS="$HOME/firebase-key.json"
+
+      - name: Run script with Firestore access
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: "$HOME/firebase-key.json"
+        run: |
+          echo "${HOME}"
+          head -2 "$HOME/firebase-key.json"
+
       # Runs a single command using the runners shell
       - shell: bash
         env:
