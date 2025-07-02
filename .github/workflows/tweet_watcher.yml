@@ -45,5 +45,5 @@ jobs:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.FG_PAT_SCRAPCAST }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GOOGLE_APPLICATION_CREDENTIALS: $HOME/firebase-key.json
+          GOOGLE_APPLICATION_CREDENTIALS: "$HOME/firebase-key.json"
         run: python tweet_watcher.py
