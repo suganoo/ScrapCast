@@ -233,6 +233,12 @@ def search_recent_tweets():
         raise Exception(f"Twitter APIエラー: {response.status_code}, {response.text}")
     
     data = response.json()
+    
+    # デバッグ用: レスポンスデータの表示
+    print("========== Twitter API レスポンス ==========")
+    print(json.dumps(data, indent=2, ensure_ascii=False))
+    print("==========================================")
+    
     tweets = data.get("data", [])
     includes = data.get("includes", {})
     referenced_tweets = {tweet["id"]: tweet for tweet in includes.get("tweets", [])}
