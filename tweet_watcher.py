@@ -39,16 +39,24 @@ def initialize_firebase():
         if not service_account_key:
             raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS が環境変数に設定されていません")
         
+        # パス展開を明示的に行う
+        expanded_path = os.path.expandvars(service_account_key)
+        print(f"Firebase key path: {expanded_path}")
+        print(f"Original path: {service_account_key}")
+        
         # If it's a file path, use it directly
-        if os.path.isfile(service_account_key):
-            cred = credentials.Certificate(service_account_key)
+        if os.path.isfile(expanded_path):
+            print("✅ ファイルが見つかりました。ファイルから認証情報を読み込みます。")
+            cred = credentials.Certificate(expanded_path)
         else:
+            print("⚠️ ファイルが見つかりません。JSON文字列として解析を試みます。")
             # If it's JSON content, parse it
             try:
                 service_account_info = json.loads(service_account_key)
                 cred = credentials.Certificate(service_account_info)
-            except json.JSONDecodeError:
-                raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS の形式が正しくありません")
+                print("✅ JSON文字列として認証情報を読み込みました。")
+            except json.JSONDecodeError as e:
+                raise EnvironmentError(f"Firebase認証ファイルが見つからず、JSON解析も失敗: {expanded_path}, JSON error: {e}")
     else:
         # Local development - use service account key file
         print("ローカル環境を検出しました。サービスアカウントキーファイルを読み込みます。")
@@ -296,4 +304,14 @@ def process_tweet(tweet, referenced_tweets=None, users=None):
         print(f"⚠️  ツイート {tweet_id} の保存に失敗しました")
 
 if __name__ == "__main__":
+    # デバッグ用: Firebase接続テスト
+    print("========== Firebase接続テスト ==========")
+    try:
+        db = initialize_firebase()
+        print("✅ Firebase接続成功")
+        print(f"Firestoreクライアント: {type(db)}")
+    except Exception as e:
+        print(f"❌ Firebase接続失敗: {e}")
+    print("=====================================")
+    
     search_recent_tweets()
