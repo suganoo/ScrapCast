@@ -1,5 +1,9 @@
 import os
 import requests
+import json
+from datetime import datetime
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 # --- Constants ---
 LAST_TWEET_ID_VAR_NAME = "LAST_TWEET_ID"
@@ -20,6 +24,104 @@ GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY")
 
 if not BEARER_TOKEN:
     raise EnvironmentError("BEARER_TOKEN が環境変数に設定されていません")
+
+# --- Firebase Setup ---
+def initialize_firebase():
+    """Initialize Firebase Admin SDK"""
+    if firebase_admin._apps:
+        # Already initialized
+        return firestore.client()
+    
+    if IS_CI:
+        # GitHub Actions environment - use service account from environment variable
+        print("GitHub Actions環境を検出しました。環境変数からFirebase認証情報を読み込みます。")
+        service_account_key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+        if not service_account_key:
+            raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS が環境変数に設定されていません")
+        
+        # If it's a file path, use it directly
+        if os.path.isfile(service_account_key):
+            cred = credentials.Certificate(service_account_key)
+        else:
+            # If it's JSON content, parse it
+            try:
+                service_account_info = json.loads(service_account_key)
+                cred = credentials.Certificate(service_account_info)
+            except json.JSONDecodeError:
+                raise EnvironmentError("GOOGLE_APPLICATION_CREDENTIALS の形式が正しくありません")
+    else:
+        # Local development - use service account key file
+        print("ローカル環境を検出しました。サービスアカウントキーファイルを読み込みます。")
+        key_file = "keys/firebase-service-account-key.json"
+        if not os.path.exists(key_file):
+            raise EnvironmentError(f"Firebase サービスアカウントキーファイルが見つかりません: {key_file}")
+        cred = credentials.Certificate(key_file)
+    
+    firebase_admin.initialize_app(cred)
+    return firestore.client()
+
+# --- Firestore Operations ---
+def save_tweet_to_firestore(tweet, referenced_tweets, author_username):
+    """Save tweet data to Firestore according to scrapcast_tweets schema"""
+    try:
+        db = initialize_firebase()
+        
+        tweet_id = tweet["id"]
+        tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+        
+        # Find quoted tweet URL (there should be only one)
+        quoted_tweet_url = None
+        if tweet.get("referenced_tweets"):
+            for ref in tweet["referenced_tweets"]:
+                if ref["type"] == "quoted":
+                    quoted_tweet_url = f"https://twitter.com/i/web/status/{ref['id']}"
+                    break
+        
+        # Create document data according to schema
+        tweet_data = {
+            "id": tweet_id,
+            "url": tweet_url,
+            "author_username": author_username,
+            "quoted_tweet_url": quoted_tweet_url,
+            "created_at": datetime.now(),
+            "processed": False,
+            "processing_status": {
+                "summarized": False,
+                "saved_to_github": False,
+                "replied": False
+            }
+        }
+        
+        # Save to Firestore
+        doc_ref = db.collection("scrapcast_tweets").document(tweet_id)
+        doc_ref.set(tweet_data)
+        
+        print(f"✅ ツイート {tweet_id} をFirestoreに保存しました")
+        print(f"   引用ツイートURL: {tweet_url}")
+        if quoted_tweet_url:
+            print(f"   引用元URL: {quoted_tweet_url}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Firestoreへの保存に失敗しました: {e}")
+        return False
+
+def check_tweet_exists_in_firestore(tweet_id):
+    """Check if tweet already exists in Firestore to avoid duplicates"""
+    try:
+        db = initialize_firebase()
+        doc_ref = db.collection("scrapcast_tweets").document(tweet_id)
+        doc = doc_ref.get()
+        
+        if doc.exists:
+            print(f"⚠️  ツイート {tweet_id} は既にFirestoreに存在します")
+            return True
+        return False
+        
+    except Exception as e:
+        print(f"❌ Firestore重複チェックに失敗しました: {e}")
+        return False
 
 # --- GitHub Variable Helpers ---
 
@@ -118,7 +220,8 @@ def search_recent_tweets():
         "query": SEARCH_QUERY,
         "max_results": 10,
         "tweet.fields": "created_at,text,author_id,referenced_tweets",
-        "expansions": "referenced_tweets.id"
+        "expansions": "referenced_tweets.id,author_id",
+        "user.fields": "username"
     }
     if last_tweet_id:
         params["since_id"] = last_tweet_id
@@ -133,6 +236,7 @@ def search_recent_tweets():
     tweets = data.get("data", [])
     includes = data.get("includes", {})
     referenced_tweets = {tweet["id"]: tweet for tweet in includes.get("tweets", [])}
+    users = {user["id"]: user for user in includes.get("users", [])}
     
     if not tweets:
         print("新着ツイートはありません。")
@@ -143,16 +247,23 @@ def search_recent_tweets():
     save_last_tweet_id(newest_tweet_id)
     
     for tweet in tweets:
-        process_tweet(tweet, referenced_tweets)
+        process_tweet(tweet, referenced_tweets, users)
 
-def process_tweet(tweet, referenced_tweets=None):
+def process_tweet(tweet, referenced_tweets=None, users=None):
     text = tweet["text"]
     tweet_id = tweet["id"]
     tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
     
+    # Get author username from users data
+    author_id = tweet.get("author_id")
+    author_username = "unknown"
+    if author_id and users and author_id in users:
+        author_username = users[author_id].get("username", "unknown")
+    
     print("========== 引用ツイート取得 ==========")
     print(f"引用ツイート本文: {text}")
     print(f"引用ツイートURL: {tweet_url}")
+    print(f"投稿者: @{author_username}")
     
     # 引用元ツイートの情報を表示
     for ref in tweet["referenced_tweets"]:
@@ -164,7 +275,19 @@ def process_tweet(tweet, referenced_tweets=None):
             print(f"引用元URL: {quoted_url}")
     
     print("=====================================")
-    # TODO: Zenn投稿、要約、Notion保存などの処理をここで呼び出す
+    
+    # 重複チェック
+    if check_tweet_exists_in_firestore(tweet_id):
+        print(f"スキップ: ツイート {tweet_id} は既に処理済みです")
+        return
+    
+    # Firestoreに保存
+    success = save_tweet_to_firestore(tweet, referenced_tweets, author_username)
+    
+    if success:
+        print(f"🎉 ツイート {tweet_id} (@{author_username}) の処理が完了しました")
+    else:
+        print(f"⚠️  ツイート {tweet_id} の保存に失敗しました")
 
 if __name__ == "__main__":
     search_recent_tweets()

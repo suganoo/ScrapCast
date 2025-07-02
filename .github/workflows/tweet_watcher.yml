@@ -28,9 +28,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Setup Firebase credentials
+        run: |
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}" | base64 -d > $HOME/firebase-key.json
+
       - name: Run tweet watcher script
         env:
           BEARER_TOKEN: ${{ secrets.BEARER_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.FG_PAT_SCRAPCAST }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          GOOGLE_APPLICATION_CREDENTIALS: $HOME/firebase-key.json
         run: python tweet_watcher.py
