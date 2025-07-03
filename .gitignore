@@ -1,1 +1,28 @@
 .venv/
+
+# Firebase
+.firebase/
+*-debug.log
+firebase-debug*.log
+
+# Cloud Functions
+functions/node_modules/
+functions/.eslintrc.js
+scrapcast_functions/node_modules/
+scrapcast_functions/.eslintrc.js
+
+# Firebase secrets & config
+keys/
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+pglite-debug.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock

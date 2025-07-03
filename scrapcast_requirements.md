@@ -149,6 +149,133 @@ scrapcast_users/{username}
 
 ---
 
+### ⚡ Cloud Functions イベント駆動処理
+
+Firestoreへのツイート保存をトリガーに、後続処理を自動実行する仕組み。
+
+#### トリガー設定
+```javascript
+exports.processTweet = functions.firestore
+  .document('scrapcast_tweets/{tweetId}')
+  .onCreate(async (snap, context) => {
+    // 新規ツイート保存時の自動処理実行
+  });
+```
+
+#### 処理フロー
+```
+Firestore保存 → Cloud Functions起動 → 後続処理実行 → 状態更新
+```
+
+**詳細ステップ**:
+1. **Twitter API再取得**: 引用元ツイートの詳細内容を取得
+2. **ユーザー設定取得**: `scrapcast_users`から対象ユーザーのGitHub設定
+3. **AI要約生成**: Gemini/GPT-4o miniで要約とタイトル生成
+4. **GitHub保存**: Markdown形式でユーザーリポジトリに追記
+5. **Twitter リプライ**: 処理完了を元ツイートに返信
+6. **状態更新**: `processed: true`, `processing_status`更新
+
+#### エラーハンドリング・監視
+- **段階的状態管理**: `processing_status`で各段階の成功/失敗を追跡
+- **再試行機能**: 失敗時の自動リトライ（最大3回）
+- **エラーログ**: Cloud Logging で詳細なエラー記録
+- **処理時間監視**: 各段階の実行時間を計測
+- **アラート機能**: 連続失敗時の通知機能
+
+#### 環境・認証管理
+**Cloud Functions環境変数**:
+- `TWITTER_BEARER_TOKEN`: Twitter API認証
+- `GITHUB_PAT`: GitHub API認証
+- `OPENAI_API_KEY`: OpenAI API認証
+- `GOOGLE_AI_API_KEY`: Google AI API認証
+
+#### 技術選択
+- **実装言語**: Node.js（Firebase SDK最適化）
+- **デプロイ**: Firebase CLI
+- **ローカル開発**: Firebase Emulator Suite
+- **監視**: Firebase Performance Monitoring
+
+---
+
+### 🔗 GitHub連携（GitHub App方式）
+
+不特定多数のユーザーが安全にGitHubリポジトリを連携できる仕組み。
+
+#### ユーザーオンボーディングフロー
+```
+1. ScrapCast Webページアクセス
+2. Twitterアカウントでサインアップ・ログイン
+3. GitHub連携設定画面表示
+4. 「GitHubと連携する」ボタンクリック
+5. GitHub App承認ページにリダイレクト
+6. ユーザーがリポジトリ選択・App承認
+7. ScrapCastに戻り、設定完了
+```
+
+#### GitHub App設定
+```yaml
+App Name: ScrapCast
+Homepage URL: https://scrapcast.your-domain.com
+Webhook URL: https://us-central1-your-project.cloudfunctions.net/github-webhook
+Repository permissions:
+  - Contents: Write (ファイル読み書き)
+  - Metadata: Read (リポジトリ情報)
+  - Pull requests: Write (将来のPR作成機能用)
+User permissions:
+  - Email: Read (ユーザー識別用)
+```
+
+#### Cloud Functions GitHub認証
+```javascript
+// GitHub App認証
+const { App } = require('@octokit/app');
+const app = new App({
+  appId: process.env.GITHUB_APP_ID,
+  privateKey: process.env.GITHUB_APP_PRIVATE_KEY,
+});
+
+// ユーザーごとの一時トークン取得
+const installationAccessToken = await app.getInstallationAccessToken({
+  installationId: userData.github_installation_id
+});
+
+// GitHub API操作
+const octokit = new Octokit({
+  auth: installationAccessToken.token
+});
+```
+
+#### Firestoreスキーマ拡張
+```
+scrapcast_users/{username}
+├── username: string           // Twitterアカウント名
+├── github_installation_id: string // GitHub App Installation ID
+├── github_owner: string       // GitHubオーナー名
+├── github_repo: string        // GitHubリポジトリ名
+├── github_file_path: string   // 保存先ファイルパス
+├── permissions_granted: boolean // App承認済みフラグ
+├── created_at: timestamp
+├── active: boolean
+└── settings: {
+    ├── auto_reply: boolean
+    └── summary_length: string
+    }
+```
+
+#### セキュリティ・権限管理
+- **最小権限の原則**: 承認されたリポジトリのみアクセス可能
+- **一時トークン**: Installation Access Tokenで短期間有効
+- **リポジトリ選択**: ユーザーがGitHub側で明示的に選択
+- **権限取り消し**: ユーザーはGitHub側でいつでも取り消し可能
+
+#### メリット
+- **ユーザー体験**: ボタン1つで連携完了
+- **セキュリティ**: 必要最小限の権限のみ付与
+- **保守性**: トークン管理が不要
+- **スケーラビリティ**: 不特定多数のユーザーに対応
+
+---
+
 ### 🏗 インフラ構成（低コスト・MVP向け）
 
 ScrapCastは、コストを抑えながら安定して動作するインフラ構成を採用する。
