@@ -283,16 +283,18 @@ ScrapCastは、コストを抑えながら安定して動作するインフラ�
 #### 構成要素：
 | 機能        | サービス        | プラン/料金        | 備考 |
 |-------------|------------------|---------------------|------|
-| Web UI/API  | Render.com または Fly.io | 無料枠あり（月数百円以下） | Node.js / Python 対応 |
+| Web UI      | Firebase Hosting | 無料枠が非常に寛大   | 高速CDN・SSL自動・静的サイトに最適 |
+| APIサーバー | Cloud Functions  | 無料枠あり          | Firestoreトリガーで動作・サーバーレス |
 | DB（設定管理用） | Cloud Firestore（Firebase） | 無料枠で十分 | スキーマレス・シンプル |
 | Polling処理 | GitHub Actions（cron） | 無料（パブリックRepo前提） | 定期実行可能、シンプル構成 |
-| OAuth連携 | Render/Fly内で対応 | - | 認証・リダイレクト処理対応 |
-| Secrets管理 | Render/Fly/Actionsに内蔵 | - | APIトークンを安全に保持 |
+| OAuth連携   | Cloud Functions等で対応 | - | 認証・リダイレクト処理対応 |
+| Secrets管理 | Firebase/Actionsに内蔵 | - | APIトークンを安全に保持 |
 
 #### ポイント：
-- GitHub Actionsのcronを使えば、常駐プロセスなしでPollingを実現
-- Firestoreは5万読み取り/月・1GBストレージまで無料で十分
-- RenderやFly.ioは無料で常時稼働可能（低負荷アプリ前提）
+- Firebase Hostingは高速なCDNと十分な無料枠を提供し、Firestoreとの連携もスムーズ。
+- GitHub Actionsのcronを使えば、常駐プロセスなしでPollingを実現できる。
+- FirestoreとCloud Functionsを中心に、Firebaseエコシステムで完結させることで管理をシンプルに保つ。
+
 
 #### 補足：
 - 一定のユーザー数を超えたら有料プラン or クラウド移行も検討
