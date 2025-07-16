@@ -1,7 +1,7 @@
 import os
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -217,6 +217,34 @@ def save_last_tweet_id(tweet_id):
 
 # --- Twitter API Logic ---
 
+def validate_tweet_id_age(tweet_id, max_age_days=7):
+    """
+    Tweet IDが有効期間内かチェック（7日以内）
+    """
+    if not tweet_id:
+        return False
+    
+    try:
+        # Twitter Snowflake IDから日時を算出
+        timestamp = ((int(tweet_id) >> 22) + 1288834974657) / 1000
+        tweet_date = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        
+        is_valid = tweet_date >= cutoff_date
+        
+        if not is_valid:
+            print(f"❌ Tweet ID {tweet_id} は古すぎます")
+            print(f"   ツイート日時: {tweet_date}")
+            print(f"   制限基準日時: {cutoff_date}")
+        else:
+            print(f"✅ Tweet ID {tweet_id} は有効です (日時: {tweet_date})")
+        
+        return is_valid
+        
+    except Exception as e:
+        print(f"Tweet ID検証エラー: {e}")
+        return False
+
 def bearer_oauth(r):
     r.headers["Authorization"] = f"Bearer {BEARER_TOKEN}"
     r.headers["User-Agent"] = "TweetWatcher"
@@ -224,6 +252,12 @@ def bearer_oauth(r):
 
 def search_recent_tweets():
     last_tweet_id = load_last_tweet_id()
+    
+    # since_idの事前検証
+    if last_tweet_id and not validate_tweet_id_age(last_tweet_id):
+        print("🔄 since_idが古いため、リセットして最新から検索します")
+        last_tweet_id = None
+    
     params = {
         "query": SEARCH_QUERY,
         "max_results": 10,
@@ -231,10 +265,13 @@ def search_recent_tweets():
         "expansions": "referenced_tweets.id,author_id",
         "user.fields": "username"
     }
+    
     if last_tweet_id:
         params["since_id"] = last_tweet_id
+        print(f"検索クエリ: {params['query']}, since_id: {last_tweet_id} (検証済み)")
+    else:
+        print(f"検索クエリ: {params['query']}, since_id: なし (最新から検索)")
     
-    print(f"検索クエリ: {params['query']}, since_id: {last_tweet_id}")
     response = requests.get(SEARCH_URL, auth=bearer_oauth, params=params)
     
     if response.status_code != 200:
