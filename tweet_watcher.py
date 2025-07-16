@@ -1,6 +1,7 @@
 import os
 import requests
 import json
+import re
 from datetime import datetime, timezone, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -10,6 +11,7 @@ LAST_TWEET_ID_VAR_NAME = "LAST_TWEET_ID"
 LAST_TWEET_ID_FILENAME = "last_tweet_id.txt"
 SEARCH_QUERY = "@ScrapCastGoGo is:quote"
 SEARCH_URL = "https://api.twitter.com/2/tweets/search/recent"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 # --- Environment Setup ---
 # Load .env only if not in a CI environment (like GitHub Actions)
@@ -24,6 +26,9 @@ GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY")
 
 if not BEARER_TOKEN:
     raise EnvironmentError("BEARER_TOKEN が環境変数に設定されていません")
+
+if not GEMINI_API_KEY:
+    raise EnvironmentError("GEMINI_API_KEY が環境変数に設定されていません")
 
 # --- Firebase Setup ---
 def initialize_firebase():
@@ -215,6 +220,95 @@ def save_last_tweet_id(tweet_id):
         with open(LAST_TWEET_ID_FILENAME, 'w') as f:
             f.write(str(tweet_id))
 
+# --- AI Analysis Logic ---
+
+def extract_urls_from_text(text):
+    """
+    テキストからURLを抽出
+    """
+    url_pattern = r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    urls = re.findall(url_pattern, text)
+    return urls
+
+def analyze_tweet_with_gemini(tweet_text, tweet_url, created_at):
+    """
+    Gemini FlashでツイートをAI分析
+    """
+    try:
+        # URLを抽出
+        extracted_urls = extract_urls_from_text(tweet_text)
+        urls_text = '\n'.join(extracted_urls) if extracted_urls else ''
+        
+        # 日本時間に変換
+        jst_time = created_at.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=9)))
+        formatted_time = jst_time.strftime('%Y-%m-%d %H:%M')
+        
+        prompt = f"""以下のツイートを分析して、指定されたフォーマットで出力してください。
+
+ツイート内容: {tweet_text}
+投稿日時: {formatted_time}
+ツイートURL: {tweet_url}
+ツイート内のURL: {urls_text}
+
+出力フォーマット（必ず4行で出力）:
+1行目: ### {formatted_time} [内容を要約した短いタイトル]
+2行目: [ツイート内容の要約を1行で]
+3行目: {tweet_url}
+4行目: [ツイート内のURL、なければ空行]
+
+注意事項:
+- タイトルは20文字以内で簡潔に
+- 要約は1行100文字以内で
+- 技術的な内容は正確に
+- 日本語で出力
+- 必ず4行で出力
+
+例:
+### 2025-01-16 14:30 React 18の新機能について
+Reactの新しいConcurrent Featuresにより、UIの応答性が大幅に改善される
+https://twitter.com/username/status/1234567890
+https://react.dev/blog/react-18"""
+
+        # Gemini API呼び出し
+        headers = {
+            'Content-Type': 'application/json',
+        }
+        
+        data = {
+            'contents': [{
+                'parts': [{'text': prompt}]
+            }],
+            'generationConfig': {
+                'temperature': 0.3,
+                'topK': 40,
+                'topP': 0.95,
+                'maxOutputTokens': 200,
+            }
+        }
+        
+        response = requests.post(
+            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}',
+            headers=headers,
+            json=data
+        )
+        
+        if response.status_code != 200:
+            print(f"Gemini APIエラー: {response.status_code}, {response.text}")
+            return None
+        
+        result = response.json()
+        generated_text = result['candidates'][0]['content']['parts'][0]['text']
+        
+        print("========== AI分析結果 ==========")
+        print(generated_text)
+        print("===============================")
+        
+        return generated_text.strip()
+        
+    except Exception as e:
+        print(f"AI分析エラー: {e}")
+        return None
+
 # --- Twitter API Logic ---
 
 def validate_tweet_id_age(tweet_id, max_age_days=7):
@@ -304,6 +398,7 @@ def process_tweet(tweet, referenced_tweets=None, users=None):
     text = tweet["text"]
     tweet_id = tweet["id"]
     tweet_url = f"https://twitter.com/i/web/status/{tweet_id}"
+    created_at = datetime.fromisoformat(tweet["created_at"].replace('Z', '+00:00'))
     
     # Get author username from users data
     author_id = tweet.get("author_id")
@@ -315,22 +410,42 @@ def process_tweet(tweet, referenced_tweets=None, users=None):
     print(f"引用ツイート本文: {text}")
     print(f"引用ツイートURL: {tweet_url}")
     print(f"投稿者: @{author_username}")
+    print(f"投稿日時: {created_at}")
     
-    # 引用元ツイートの情報を表示
-    for ref in tweet["referenced_tweets"]:
-        if ref["type"] == "quoted" and ref["id"] in referenced_tweets:
+    # 引用元ツイートの情報を取得
+    quoted_tweet_text = ""
+    quoted_tweet_url = ""
+    
+    for ref in tweet.get("referenced_tweets", []):
+        if ref["type"] == "quoted" and referenced_tweets and ref["id"] in referenced_tweets:
             quoted_tweet = referenced_tweets[ref["id"]]
-            quoted_url = f"https://twitter.com/i/web/status/{ref['id']}"
+            quoted_tweet_text = quoted_tweet.get('text', '')
+            quoted_tweet_url = f"https://twitter.com/i/web/status/{ref['id']}"
             print("---------- 引用元ツイート ----------")
-            print(f"引用元本文: {quoted_tweet['text']}")
-            print(f"引用元URL: {quoted_url}")
+            print(f"引用元本文: {quoted_tweet_text}")
+            print(f"引用元URL: {quoted_tweet_url}")
     
     print("=====================================")
     
-    # 重複チェック
-    if check_tweet_exists_in_firestore(tweet_id):
-        print(f"スキップ: ツイート {tweet_id} は既に処理済みです")
-        return
+    # 引用元ツイートをAI分析
+    if quoted_tweet_text and quoted_tweet_url:
+        print("🤖 引用元ツイートをAI分析中...")
+        ai_analysis = analyze_tweet_with_gemini(quoted_tweet_text, quoted_tweet_url, created_at)
+        
+        if ai_analysis:
+            print("✅ AI分析完了")
+            print("\n========== AI分析結果（最終出力） ==========")
+            print(ai_analysis)
+            print("==========================================\n")
+        else:
+            print("❌ AI分析に失敗しました")
+    else:
+        print("⚠️ 引用元ツイートが見つかりません")
+    
+    # 重複チェック（コメントアウト）
+    # if check_tweet_exists_in_firestore(tweet_id):
+    #     print(f"スキップ: ツイート {tweet_id} は既に処理済みです")
+    #     return
     
     # Firestoreに保存
     success = save_tweet_to_firestore(tweet, referenced_tweets, author_username)
